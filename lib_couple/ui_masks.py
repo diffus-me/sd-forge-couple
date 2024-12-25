@@ -118,7 +118,7 @@ class CoupleMaskData:
 
         weights_field = gr.Textbox(visible=False, elem_classes="fc_msk_weights")
 
-        dummy = None if is_gradio_4 else gr.State()
+        dummy = None if is_gradio_4 else gr.Label(visible=False)
 
         with gr.Row(elem_classes="fc_msk_uploads"):
             upload_background = gr.Image(
