@@ -36,7 +36,7 @@ class ForgeCouple(scripts.Script):
         return scripts.AlwaysVisible
 
     def ui(self, is_img2img):
-        return couple_ui(self, is_img2img, f"{self.title()} v{VERSION}")
+        return couple_ui(self, is_img2img, f"Image Composition ({self.title()} v{VERSION})")
 
     def after_component(self, component, **kwargs):
         if not (elem_id := kwargs.get("elem_id", None)):
