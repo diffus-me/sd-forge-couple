@@ -86,7 +86,7 @@ def advanced_ui(
         f"Pull from {'txt2img' if is_img2img else 'img2img'}", elem_classes="round-btn"
     )
 
-    with gr.Accordion("Presets", open=False):
+    with gr.Accordion("Presets", open=False, visible=False):
         with gr.Row(elem_classes="style-rows"):
             preset_choice = gr.Dropdown(
                 label="Mapping Presets",
