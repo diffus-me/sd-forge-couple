@@ -143,7 +143,11 @@ def couple_ui(script, is_img2img: bool, title: str):
 
             if is_img2img:
                 CoupleDataTransfer.I2I_MASK = couple_mask
-                CoupleDataTransfer.hook_mask()  # img2img always happens after txt2img
+                # CoupleDataTransfer.hook_mask()  # img2img always happens after txt2img
+
+                CoupleDataTransfer.I2I_MASK.make_pull(CoupleDataTransfer.T2I_MASK)
+                CoupleDataTransfer.T2I_MASK.make_pull(CoupleDataTransfer.I2I_MASK)
+
             else:
                 CoupleDataTransfer.T2I_MASK = couple_mask
 
@@ -203,4 +207,6 @@ def couple_ui(script, is_img2img: bool, title: str):
         mapping,
         common_parser,
         common_debug,
+        couple_mask.gallery,
+        couple_mask.weights,
     ]

@@ -10,34 +10,47 @@ try:
 except ImportError:
     pass
 
+_GALLERY = list[tuple[Image.Image, str | None]] | None
+
 
 class CoupleMaskData:
 
     def __init__(self, is_img2img: bool):
         self.mode: str = "i2i" if is_img2img else "t2i"
-        self.masks: list[Image.Image] = []
-        self.weights: list[float] = []
-        self.opposite: CoupleMaskData
+        # self.masks: list[Image.Image] = []
+        # self.weights: list[float] = []
+        # self.opposite: CoupleMaskData
 
-        self.selected_index: int = -1
+        # self.selected_index: int = -1
 
-    def pull_mask(self) -> list[dict]:
+        self.gallery: gr.Gallery
+        self.weights: gr.Textbox
+
+        self._btn_pull: gr.Button
+        self._preview: gr.Image
+        self._btn_load = gr.Button
+        self._btn_override = gr.Button
+
+    def pull_mask(self, gallery: _GALLERY, encoded_weights: str) -> list[dict]:
         """Pull the masks from the opposite tab"""
-        if not (masks_data := self.opposite.get_masks()):
+        if not (masks_data := self.get_masks(gallery, encoded_weights)):
             return []
 
         return [data["mask"] for data in masks_data]
 
-    def get_masks(self) -> list[dict]:
+    def get_masks(self, gallery: _GALLERY, encoded_weights: str) -> list[dict]:
         """Return the current masks as well as weights"""
-        count = len(self.masks)
-        assert count == len(self.weights)
+        masks = self._gallery_to_masks(gallery)
+        weights = self._decode_weights(encoded_weights)
+
+        count = len(masks)
+        assert count == len(weights)
 
         if count == 0:
             return None
 
         return [
-            {"mask": self.masks[i], "weight": self.weights[i]} for i in range(count)
+            {"mask": masks[i], "weight": weights[i]} for i in range(count)
         ]
 
     def mask_ui(self, btn, res, mode) -> list[gr.components.Component]:
@@ -80,6 +93,8 @@ class CoupleMaskData:
             msk_btn_override = gr.Button(
                 "Override Mask", interactive=False, elem_classes="round-btn"
             )
+            self._btn_load = msk_btn_load
+            self._btn_override = msk_btn_override
 
         with gr.Row(visible=False):
             operation = gr.Textbox(interactive=True, elem_classes="fc_msk_op")
@@ -99,15 +114,18 @@ class CoupleMaskData:
             show_download_button=False,
             elem_classes="fc_msk_preview",
         )
+        self._preview = msk_preview
 
         msk_gallery = gr.Gallery(
             show_label=False,
             show_share_button=False,
             show_download_button=False,
+            type="pil",
             interactive=False,
             visible=False,
             elem_classes="fc_msk_gal",
         )
+        self.gallery = msk_gallery
 
         msk_btn_reset = gr.Button("Reset All Masks", elem_classes="round-btn")
 
@@ -115,8 +133,19 @@ class CoupleMaskData:
             f"Pull from {'txt2img' if self.mode == 'i2i' else 'img2img'}",
             elem_classes="round-btn",
         )
+        self._btn_pull = msk_btn_pull
+
+        # msk_btn_pull.click(
+        #     self._pull_mask,
+        #     None,
+        #     [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
+        # ).success(
+        #     fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
+        # )
 
         weights_field = gr.Textbox(visible=False, elem_classes="fc_msk_weights")
+        index_field = gr.Number(visible=False)
+        self.weights = weights_field
 
         dummy = None if is_gradio_4 else gr.Label(visible=False)
 
@@ -161,17 +190,17 @@ class CoupleMaskData:
             ),
         )
 
-        msk_btn_pull.click(
-            self._pull_mask,
-            None,
-            [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
-        ).success(
-            fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
-        )
+        # msk_btn_pull.click(
+        #     self._pull_mask,
+        #     None,
+        #     [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
+        # ).success(
+        #     fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
+        # )
 
         msk_btn_save.click(
             self._write_mask,
-            msk_canvas.foreground if is_gradio_4 else msk_canvas,
+            [msk_canvas.foreground if is_gradio_4 else msk_canvas, msk_gallery],
             [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
         ).success(
             fn=self._create_empty,
@@ -187,14 +216,16 @@ class CoupleMaskData:
 
         msk_btn_override.click(
             self._override_mask,
-            msk_canvas.foreground if is_gradio_4 else msk_canvas,
-            [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
+            [msk_canvas.foreground if is_gradio_4 else msk_canvas, msk_gallery, index_field],
+            [msk_gallery, msk_preview, msk_btn_load, msk_btn_override, index_field],
         ).success(
             fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
         )
 
         msk_btn_load.click(
-            self._load_mask, None, msk_canvas.foreground if is_gradio_4 else msk_canvas
+            self._load_mask,
+            [msk_gallery, index_field],
+            msk_canvas.foreground if is_gradio_4 else msk_canvas
         )
 
         msk_btn_reset.click(
@@ -205,19 +236,19 @@ class CoupleMaskData:
             fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
         )
 
-        weights_field.change(self._write_weights, weights_field)
+        # weights_field.change(self._write_weights, weights_field)
 
         operation_btn.click(
             self._on_operation,
-            operation,
-            [msk_gallery, msk_preview, msk_btn_load, msk_btn_override],
+            [operation, msk_gallery, index_field],
+            [msk_gallery, msk_preview, msk_btn_load, msk_btn_override, index_field],
         ).success(
             fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
         )
 
         btn.click(
             fn=self._refresh_resolution,
-            inputs=[res, mode],
+            inputs=[res, mode, msk_gallery],
             outputs=(
                 [msk_gallery, msk_preview, msk_canvas.background, msk_canvas.foreground]
                 if is_gradio_4
@@ -262,6 +293,7 @@ class CoupleMaskData:
                 msk_gallery,
                 msk_btn_reset,
                 weights_field,
+                index_field,
                 upload_background,
                 upload_mask,
             )
@@ -272,6 +304,28 @@ class CoupleMaskData:
             msk_canvas.background.do_not_save_to_config = True
         else:
             dummy.do_not_save_to_config = True
+
+
+    def make_pull(self, opposite: "CoupleMaskData") -> None:
+        self._btn_pull.click(
+            self._pull_mask,
+            [opposite.gallery, opposite.weights],
+            [self.gallery, self._preview, self._btn_load, self._btn_override],
+        ).success(
+            fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
+        )
+
+
+    @staticmethod
+    def _gallery_to_masks(gallery: _GALLERY) -> list[Image.Image]:
+        return [item[0] for item in gallery] if gallery else []
+
+    @staticmethod
+    def _decode_weights(weights: str) -> list[float]:
+        if not weights:
+            return []
+
+        return [float(v) for v in weights.split(",")]
 
     @staticmethod
     def _parse_resolution(resolution: str) -> tuple[int, int]:
@@ -324,45 +378,47 @@ class CoupleMaskData:
 
         return [image, gr.update(value=None)]
 
-    def _on_operation(self, op: str) -> list[list, Image.Image, bool, bool]:
+    def _on_operation(self, op: str, gallery: _GALLERY, selected_index: int) -> list[list, Image.Image, bool, bool]:
         """Operations triggered from JavaScript"""
-        self.selected_index = -1
+        masks = self._gallery_to_masks(gallery)
+
         mask_update: bool = True
 
         # Reorder
         if "=" in op:
             from_id, to_id = [int(v) for v in op.split("=")]
-            self.masks[from_id], self.masks[to_id] = (
-                self.masks[to_id],
-                self.masks[from_id],
+            masks[from_id], masks[to_id] = (
+                masks[to_id],
+                masks[from_id],
             )
 
         # Delete
         elif "-" in op:
             to_del = int(op.split("-")[1])
-            del self.masks[to_del]
+            del masks[to_del]
 
         # Select
         else:
-            self.selected_index = int(op.strip())
+            selected_index = int(op.strip())
             mask_update = False
 
         return [
-            self.masks if mask_update else gr.update(),
-            self._generate_preview() if mask_update else gr.update(),
-            gr.update(interactive=(self.selected_index >= 0)),
-            gr.update(interactive=(self.selected_index >= 0)),
+            masks if mask_update else gr.update(),
+            self._generate_preview(masks) if mask_update else gr.update(),
+            gr.update(interactive=(selected_index >= 0)),
+            gr.update(interactive=(selected_index >= 0)),
+            selected_index,
         ]
 
-    def _generate_preview(self) -> Image.Image:
+    def _generate_preview(self, masks: list[Image.Image]) -> Image.Image:
         """Create a preview based on cached masks"""
-        if not self.masks:
+        if not masks:
             return None
 
-        res: tuple[int, int] = self.masks[0].size
+        res: tuple[int, int] = masks[0].size
         bg = Image.new("RGBA", res, "black")
 
-        for i, mask in enumerate(self.masks):
+        for i, mask in enumerate(masks):
             color = Image.new("RGB", res, COLORS[i % 7])
             alpha = Image.fromarray(np.asarray(mask, dtype=np.uint8) * 144)
             rgba = Image.merge("RGBA", [*color.split(), alpha.convert("L")])
@@ -371,7 +427,7 @@ class CoupleMaskData:
         return bg
 
     def _refresh_resolution(
-        self, resolution: str, mode: str
+        self, resolution: str, mode: str, gallery: _GALLERY
     ) -> list[list, Image.Image, Image.Image, None]:
         """Refresh when width or height is changed"""
 
@@ -382,39 +438,42 @@ class CoupleMaskData:
 
         w, h = self._parse_resolution(resolution)
 
-        self.masks = [mask.resize((w, h)) for mask in self.masks]
-        preview = self._generate_preview()
+        masks = self._gallery_to_masks(gallery)
 
-        return [self.masks, preview, canvas, None]
+        masks = [mask.resize((w, h)) for mask in masks]
+        preview = self._generate_preview(masks)
+
+        return [masks, preview, canvas, None]
 
     def _reset_masks(self) -> list[list, Image.Image, bool, bool]:
         """Clear everything"""
-        self.masks.clear()
-        self.weights.clear()
-        preview = self._generate_preview()
+        preview = self._generate_preview([])
 
         return [
-            self.masks,
+            [],
             preview,
             gr.update(interactive=False),
             gr.update(interactive=False),
         ]
 
-    def _load_mask(self) -> Image.Image:
+    def _load_mask(self, gallery: _GALLERY, selected_index: int) -> Image.Image:
         """Load a cached mask to canvas based on index"""
-        return self.masks[self.selected_index]
+        masks = self._gallery_to_masks(gallery)
+        return masks[selected_index]
 
     def _override_mask(
-        self, img: None | Image.Image
+        self, img: None | Image.Image, gallery: _GALLERY, selected_index: int
     ) -> list[list, Image.Image, bool, bool]:
         """Override a cached mask based on index"""
+        masks = self._gallery_to_masks(gallery)
+
         if img is None:
-            self.selected_index = -1
             return [
-                self.masks,
+                masks,
                 gr.update(),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
+                -1,
             ]
 
         assert isinstance(img, Image.Image)
@@ -424,32 +483,34 @@ class CoupleMaskData:
         img = Image.fromarray(mask.astype(np.uint8))
 
         if not bool(img.getbbox()):
-            self.selected_index = -1
             return [
-                self.masks,
+                masks,
                 gr.update(),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
+                -1,
             ]
 
-        self.masks[self.selected_index] = img.convert("1")
-        self.selected_index = -1
+        masks[selected_index] = img.convert("1")
 
-        preview = self._generate_preview()
+        preview = self._generate_preview(masks)
         return [
-            self.masks,
+            masks,
             preview,
             gr.update(interactive=False),
             gr.update(interactive=False),
+            -1,
         ]
 
     def _write_mask(
-        self, img: None | Image.Image
+        self, img: None | Image.Image, gallery: _GALLERY
     ) -> list[list, Image.Image, bool, bool]:
         """Save a new mask"""
+        masks = self._gallery_to_masks(gallery)
+
         if img is None:
             return [
-                self.masks,
+                masks,
                 gr.update(),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
@@ -463,40 +524,40 @@ class CoupleMaskData:
 
         if not bool(img.getbbox()):
             return [
-                self.masks,
+                masks,
                 gr.update(),
                 gr.update(interactive=False),
                 gr.update(interactive=False),
             ]
 
-        self.masks.append(img.convert("1"))
+        masks.append(img.convert("1"))
 
-        preview = self._generate_preview()
+        preview = self._generate_preview(masks)
         return [
-            self.masks,
+            masks,
             preview,
             gr.update(interactive=False),
             gr.update(interactive=False),
         ]
 
-    def _pull_mask(self) -> list[list, Image.Image, bool, bool]:
+    def _pull_mask(self, gallery: _GALLERY, encoded_weights: str) -> list[list, Image.Image, bool, bool]:
         """Pull masks from opposite tab"""
 
-        masks: list[Image.Image] = self.pull_mask()
+        masks: list[Image.Image] = self.pull_mask(gallery, encoded_weights)
 
-        self.masks = masks
+        # self.masks = masks
 
-        preview = self._generate_preview()
+        preview = self._generate_preview(masks)
         return [
-            self.masks,
+            masks,
             preview,
             gr.update(interactive=False),
             gr.update(interactive=False),
         ]
 
-    def _write_weights(self, weights: str):
-        """Cache the mask weights"""
-        if not weights.strip():
-            self.weights = []
-        else:
-            self.weights = [float(v) for v in weights.split(",")]
+    # def _write_weights(self, weights: str):
+    #     """Cache the mask weights"""
+    #     if not weights.strip():
+    #         self.weights = []
+    #     else:
+    #         self.weights = [float(v) for v in weights.split(",")]

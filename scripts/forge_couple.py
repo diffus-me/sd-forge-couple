@@ -16,6 +16,8 @@ from lib_couple.attention_couple import AttentionCouple
 from lib_couple.logging import logger
 from lib_couple.gr_version import js
 
+from lib_couple.ui_masks import _GALLERY
+
 
 VERSION = "3.3.4"
 
@@ -89,6 +91,8 @@ class ForgeCouple(scripts.Script):
         mapping: list,
         common_parser: str,
         common_debug: bool,
+        msk_gallery: _GALLERY,
+        msk_weights: str,
         *args,
         **kwargs,
     ):
@@ -108,7 +112,7 @@ class ForgeCouple(scripts.Script):
 
         # Webui & API Usages...
         if mode == "Mask":
-            mapping: list = self.get_mask() or mapping
+            mapping: list = self.get_mask(msk_gallery, msk_weights) or mapping
             assert isinstance(mapping[0], dict)
 
         prompts: str = kwargs["prompts"][0]
@@ -184,6 +188,10 @@ class ForgeCouple(scripts.Script):
         background: str,
         background_weight: float,
         mapping: list,
+        common_parser: str,
+        common_debug: bool,
+        msk_gallery: _GALLERY,
+        msk_weights: str,
         *args,
         **kwargs,
     ):
@@ -236,7 +244,7 @@ class ForgeCouple(scripts.Script):
                 )
 
             case "Mask":
-                mapping: list[dict] = self.get_mask() or mapping
+                mapping: list[dict] = self.get_mask(msk_gallery, msk_weights) or mapping
 
                 fc_args = mask_mapping(
                     p.sd_model,
