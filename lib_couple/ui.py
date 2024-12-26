@@ -60,7 +60,7 @@ def couple_ui(script, is_img2img: bool, title: str):
     ):
         with gr.Row():
             with gr.Column(elem_classes="fc-checkbox", scale=2):
-                enable = gr.Checkbox(False, label="Enable")
+                enable = gr.Checkbox(False, label="Enable", elem_id=f"fc_enable_{m}")
                 disable_hr = gr.Checkbox(True, label="Compatibility")
 
             mode = gr.Radio(

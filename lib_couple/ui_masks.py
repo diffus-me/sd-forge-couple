@@ -219,6 +219,14 @@ class CoupleMaskData:
             [msk_canvas.foreground if is_gradio_4 else msk_canvas, msk_gallery, index_field],
             [msk_gallery, msk_preview, msk_btn_load, msk_btn_override, index_field],
         ).success(
+            fn=self._create_empty,
+            inputs=[res],
+            outputs=(
+                [msk_canvas.background, msk_canvas.foreground]
+                if is_gradio_4
+                else [msk_canvas, dummy]
+            ),
+        ).then(
             fn=None, **js(f'() => {{ ForgeCouple.populateMasks("{self.mode}"); }}')
         )
 
