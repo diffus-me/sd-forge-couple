@@ -69,7 +69,7 @@ class CoupleMaskData:
         )
 
         msk_canvas = (
-            ForgeCanvas(scribble_color="#FFFFFF", no_upload=True)
+            ForgeCanvas(scribble_color="#FFFFFF", no_upload=True, elem_id="fc_msk_canvas")
             if is_gradio_4
             else gr.Image(
                 show_label=False,
